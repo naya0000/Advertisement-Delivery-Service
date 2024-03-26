@@ -1,125 +1,25 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
-	"log"
-	"os"
 
-	"github.com/go-pg/migrations/v8"
-	"github.com/go-pg/pg/v10"
-	// "github.com/avast/retry-go"
-	// "github.com/go-pg/migrations"
-	// "github.com/go-pg/pg"
-	// _ "github.com/golang-migrate/migrate/v4/source/file"
-	// _ "github.com/lib/pq" // Import PostgreSQL driver
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
 )
 
-// func StartDB() (*sqlx.DB, error) {
-// 	var (
-// 		db  *sqlx.DB
-// 		err error
-// 	)
-
-// 	// Retry connecting to the database with exponential backoff
-// 	err = retry.Do(
-// 		func() error {
-// 			// Define the database connection parameters
-// 			dbURL := "postgres:admin@172.18.0.1:5435/postgres?sslmode=disable"
-// 			// dsn := "host=127.0.0.1 port=5435 user=postgres password=admin dbname=postgres sslmode=disable"
-// 			// Connect to the database
-// 			db, err = sqlx.Connect("postgres", dbURL)
-
-// 			// db, err = sqlx.Open("postgres", dbURL)
-// 			if err != nil {
-// 				return fmt.Errorf("failed to connect to the database: %v", err)
-// 			}
-// 			defer db.Close()
-
-// 			// Check if the connection is successful
-// 			ctx := context.Background()
-// 			if err := db.PingContext(ctx); err != nil {
-// 				return err // Retry will be attempted if there's an error
-// 			}
-
-// 			log.Println("Connected to the database")
-// 			return nil // Return nil to indicate success
-// 		},
-// 		retry.Delay(1*time.Second),          // Wait 1 second between retries
-// 		retry.Attempts(5),                   // Retry up to 5 times
-// 		retry.DelayType(retry.BackOffDelay), // Use exponential backoff
-// 	)
-
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to connect to the database after retries: %v", err)
-// 	}
-
-// 	// Run migrations after successful connection
-// 	err = runMigrations(db)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to run migrations: %v", err)
-// 	}
-// 	fmt.Println("Migrations executed successfully")
-
-// 	return db, nil
-// }
-
-func StartDB() (*pg.DB, error) {
-	// Define the database connection parameters
-	// dbURL := "postgresql://postgres:admin@localhost:5432/postgres?sslmode=disable"
-	// // Connect to the database
-	// db, err := pg.Connect("postgres", dbURL)
-	// if err != nil {
-	// 	log.Fatalf("failed to connect to the database: %v", err)
-	// }
-	// defer db.Close()
-
-	// // Check if the connection is successful
-	// err = db.Ping()
-	// if err != nil {
-	// 	log.Fatalf("failed to ping the database: %v", err)
-	// }
-	// log.Println("Connected to the database")
-
-	// // Run migrations
-	// err = runMigrations(db)
-	// if err != nil {
-	// 	log.Fatalf("failed to run migrations: %v", err)
-	// }
-	// fmt.Println("Migrations executed successfully")
+func StartDB() *bun.DB {
 	fmt.Println("HI!!!")
 
-	var (
-		opts *pg.Options
-		err  error
-	)
+	dsn := "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable"
+	// dsn := "unix://user:pass@dbname/var/run/postgresql/.s.PGSQL.5432"
+	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
 
-	//check if we are in prod
-	//then use the db url from the env
-	if os.Getenv("ENV") == "PROD" {
-		// fmt.Print("DATABASE_URL: ", os.Getenv("DATABASE_URL"))
-		opts, err = pg.ParseURL(os.Getenv("DATABASE_URL"))
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		opts = &pg.Options{
-			//default port
-			//depends on the db service from docker compose
-			Addr:     "db:5432",
-			User:     "postgres",
-			Password: "admin",
-		}
+	db := bun.NewDB(sqldb, pgdialect.New())
+	if db != nil {
+		fmt.Print("Connect Success.")
 	}
-	// Retry connecting to the database with exponential backoff
-
-	// err = retry.Do(
-	// 	func() error {
-	// Your database connection logic
-	db := pg.Connect(opts)
-	// 		if db == nil {
-	// 			return fmt.Errorf("failed to connect to the database")
-	// 		}
-
 	// 		// Check if the connection is successful
 	// 		ctx := context.Background()
 	// 		if err := db.Ping(ctx); err != nil {
@@ -138,30 +38,30 @@ func StartDB() (*pg.DB, error) {
 	// }
 
 	// run migrations
-	collection := migrations.NewCollection()
-	err = collection.DiscoverSQLMigrations("migrations")
-	if err != nil {
-		return nil, err
-	}
+	// collection := migrations.NewCollection()
+	// err = collection.DiscoverSQLMigrations("migrations")
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	//start the migrations
-	_, _, err = collection.Run(db, "init")
-	if err != nil {
-		return nil, err
-	}
+	// //start the migrations
+	// _, _, err = collection.Run(db, "init")
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	oldVersion, newVersion, err := collection.Run(db, "up")
-	if err != nil {
-		return nil, err
-	}
-	if newVersion != oldVersion {
-		log.Printf("migrated from version %d to %d\n", oldVersion, newVersion)
-	} else {
-		log.Printf("version is %d\n", oldVersion)
-	}
+	// oldVersion, newVersion, err := collection.Run(db, "up")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if newVersion != oldVersion {
+	// 	log.Printf("migrated from version %d to %d\n", oldVersion, newVersion)
+	// } else {
+	// 	log.Printf("version is %d\n", oldVersion)
+	// }
 
 	//return the db connection
-	return db, err
+	return db
 }
 
 // func runMigrations(db *sqlx.DB) error {

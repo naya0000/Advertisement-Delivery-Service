@@ -9,19 +9,28 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/go-pg/pg/v10"
+	"github.com/uptrace/bun"
 	// "github.com/go-pg/pg"
 )
 
-type Advertisement struct {
+type AdvertisementReq struct {
 	Title      string     `json:"title"`
 	StartAt    time.Time  `json:"startAt"`
 	EndAt      time.Time  `json:"endAt"`
 	Conditions Conditions `json:"conditions"`
 }
 
+type Advertisement struct {
+	bun.BaseModel `bun:"table:advertisement"`
+	ID            int64 `bun:",pk,autoincrement"`
+	Title         string
+	StartAt       time.Time
+	EndAt         time.Time
+}
+
 // Conditions represents conditions for displaying an advertisement
 type Conditions struct {
+	AdID     uint8    `json:"ad_id"`
 	AgeStart *uint8   `json:"ageStart,omitempty"`
 	AgeEnd   *uint8   `json:"ageEnd,omitempty"`
 	Gender   *string  `json:"gender,omitempty"`
@@ -30,50 +39,66 @@ type Conditions struct {
 }
 
 // CreateAdvertisement creates a new advertisement in the database
-func CreateAdvertisement(db *pg.DB, ad *Advertisement) error {
-
-	sqlStatement := `
-		INSERT INTO advertisement (title, start_at, end_at, conditions)
-		VALUES (?, ?, ?, ?)
-		RETURNING id
-	`
-	// Convert Conditions to JSON string
-	conditionsJSON, err := json.Marshal(ad.Conditions)
-	if err != nil {
-		return fmt.Errorf("failed to marshal conditions: %v", err)
+func CreateAdvertisement(ctx context.Context, db *bun.DB, req *AdvertisementReq) error {
+	ad := &Advertisement{
+		Title:   req.Title,
+		StartAt: req.StartAt,
+		EndAt:   req.EndAt,
 	}
-
-	// Execute the SQL statement
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// var id int
-	_, err = db.ExecContext(ctx, sqlStatement, ad.Title, ad.StartAt, ad.EndAt)
+	_, err := db.NewInsert().Model(ad).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create advertisement: %v", err)
+		return err
 	}
-
-	fmt.Println("Advertisement created successfully")
 	return nil
+	// sqlStatement := `
+	// 	INSERT INTO advertisement (title, start_at, end_at, conditions)
+	// 	VALUES (?, ?, ?, ?)
+	// 	RETURNING id
+	// `
+	// sqlStatement_1 := `
+	// 	INSERT INTO conditions (AgeStart, AgeEnd, Gender, Country, Platform)
+	// 	VALUES (?, ?, ?, ?, ?)
+	// 	RETURNING id
+	// `
+	// // Convert Conditions to JSON string
+	// conditionsJSON, err := json.Marshal(ad.Conditions)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to marshal conditions: %v", err)
+	// }
+
+	// // Execute the SQL statement
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
+
+	// // var id int
+	// _, err = db.ExecContext(ctx, sqlStatement, ad.Title, ad.StartAt, ad.EndAt)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to create advertisement: %v", err)
+	// }
+
+	// fmt.Println("Advertisement created successfully")
+	// return nil
 }
 
 // CreateAdvertisementHandler handles creating advertisements
 func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
-	var ad Advertisement
+	var ad AdvertisementReq
 	err := json.NewDecoder(r.Body).Decode(&ad)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Context
+	ctx := r.Context() // Use the request context
 	//get the db from context
-	db, ok := r.Context().Value("DB").(*pg.DB)
+	db, ok := r.Context().Value("DB").(*bun.DB)
 	if !ok {
 		//return a bad request and exist the function
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	// Call the CreateAdvertisement function to insert the advertisement into the database
-	err = CreateAdvertisement(db, &ad)
+	err = CreateAdvertisement(ctx, db, &ad)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -85,7 +110,7 @@ func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // start api with the pgdb and return a chi router
-func StartAPI(db *pg.DB) *chi.Mux {
+func StartAPI(db *bun.DB) *chi.Mux {
 
 	//get the router
 	r := chi.NewRouter()
