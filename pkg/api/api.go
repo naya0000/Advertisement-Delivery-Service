@@ -9,7 +9,8 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/jmoiron/sqlx"
+	"github.com/go-pg/pg/v10"
+	// "github.com/go-pg/pg"
 )
 
 type Advertisement struct {
@@ -29,14 +30,13 @@ type Conditions struct {
 }
 
 // CreateAdvertisement creates a new advertisement in the database
-func CreateAdvertisement(db *sqlx.DB, ad *Advertisement) error {
-	// Define the SQL statement
+func CreateAdvertisement(db *pg.DB, ad *Advertisement) error {
+
 	sqlStatement := `
 		INSERT INTO advertisement (title, start_at, end_at, conditions)
-		VALUES ($1, $2, $3, $4)
+		VALUES (?, ?, ?, ?)
 		RETURNING id
 	`
-
 	// Convert Conditions to JSON string
 	conditionsJSON, err := json.Marshal(ad.Conditions)
 	if err != nil {
@@ -47,13 +47,13 @@ func CreateAdvertisement(db *sqlx.DB, ad *Advertisement) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var id int
-	err = db.QueryRowContext(ctx, sqlStatement, ad.Title, ad.StartAt, ad.EndAt, string(conditionsJSON)).Scan(&id)
+	// var id int
+	_, err = db.ExecContext(ctx, sqlStatement, ad.Title, ad.StartAt, ad.EndAt)
 	if err != nil {
 		return fmt.Errorf("failed to create advertisement: %v", err)
 	}
 
-	fmt.Printf("Created advertisement with ID %d\n", id)
+	fmt.Println("Advertisement created successfully")
 	return nil
 }
 
@@ -66,7 +66,7 @@ func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//get the db from context
-	db, ok := r.Context().Value("DB").(*sqlx.DB)
+	db, ok := r.Context().Value("DB").(*pg.DB)
 	if !ok {
 		//return a bad request and exist the function
 		w.WriteHeader(http.StatusBadRequest)
@@ -84,14 +84,14 @@ func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Advertisement created successfully")
 }
 
-//start api with the pgdb and return a chi router
-func StartAPI(db *sqlx.DB) *chi.Mux {
+// start api with the pgdb and return a chi router
+func StartAPI(db *pg.DB) *chi.Mux {
 
 	//get the router
 	r := chi.NewRouter()
 
-	//add middleware
-	//in this case we will store our DB to use it later
+	// add middleware
+	// store our DB to use it later
 	r.Use(middleware.Logger, middleware.WithValue("DB", db))
 
 	r.Route("/api/v1/ad", func(r chi.Router) {

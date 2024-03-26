@@ -18,3 +18,4 @@ services:
       - DATABASE_URL=db
     depends_on:
       - db
+      
