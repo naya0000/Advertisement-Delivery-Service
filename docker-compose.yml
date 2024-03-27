@@ -5,7 +5,7 @@ services:
     image: postgres
     restart: always
     ports:
-      - 5435:5431
+      - 5435:5432
     environment:
       POSTGRES_PASSWORD: admin
   api:
@@ -15,7 +15,15 @@ services:
     restart: on-failure:10
     environment:
       - PORT=8080
-      - DATABASE_URL=postgres:admin@localhost:5431/postgres?sslmode=disable
+      - DATABASE_URL=db
+    depends_on:
+      - db
+  migrate:
+    image: migrate/migrate
+    command: [ "-path", "/migrations", "-database",  "postgresql://postgres:admin@db:5432/postgres?sslmode=disable", "up" ]
+    volumes:
+      - ./migrations:/migrations
+    restart: on-failure
     depends_on:
       - db
       

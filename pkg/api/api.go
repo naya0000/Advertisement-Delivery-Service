@@ -40,16 +40,41 @@ type Conditions struct {
 
 // CreateAdvertisement creates a new advertisement in the database
 func CreateAdvertisement(ctx context.Context, db *bun.DB, req *AdvertisementReq) error {
-	// ad := &Advertisement{
-	// 	Title:   req.Title,
-	// 	StartAt: req.StartAt,
-	// 	EndAt:   req.EndAt,
-	// }
-	// _, err := db.NewInsert().Model(ad).Exec(ctx)
-	// if err != nil {
-	// 	return err
-	// }
-	// return nil
+
+	ad := &Advertisement{
+		Title:   req.Title,
+		StartAt: req.StartAt,
+		EndAt:   req.EndAt,
+	}
+	index, err := db.NewInsert().Model(ad).Returning("id").Exec(ctx)
+
+	fmt.Print("index: ", index)
+	if err != nil {
+		return err
+	}
+
+	// Extract the ID from the index result
+	ad_id, err := index.LastInsertId()
+	if err != nil {
+		return err
+	}
+	var adID uint8 = uint8(ad_id)
+
+	condition := &Conditions{
+		AdID:     adID,
+		AgeStart: req.Conditions.AgeStart,
+		AgeEnd:   req.Conditions.AgeEnd,
+		Gender:   req.Conditions.Gender,
+		Country:  req.Conditions.Country,
+		Platform: req.Conditions.Platform,
+	}
+	_, err = db.NewInsert().Model(condition).Exec(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 
 	// sqlStatement := `
 	// 	INSERT INTO advertisement (title, start_at, end_at, conditions)
