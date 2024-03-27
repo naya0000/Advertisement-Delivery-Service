@@ -206,13 +206,13 @@ import (
 func main() {
 	log.Print("server has started")
 	//start the db
-	pgdb, err := db.StartDB()
+	db, err := db.StartDB()
 	if err != nil {
 		log.Printf("error starting the database %v", err)
 		panic("error starting the database")
 	}
 	//get the router of the API by passing the db
-	router := api.StartAPI(pgdb)
+	router := api.StartAPI(db)
 	//get the port from the environment variable
 	port := os.Getenv("PORT")
 	//pass the router and start listening with the server

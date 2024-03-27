@@ -18,4 +18,12 @@ services:
       - DATABASE_URL=db
     depends_on:
       - db
+  migrate:
+    image: migrate/migrate
+    command: [ "-path", "/migrations", "-database",  "postgresql://postgres:admin@db:5432/postgres?sslmode=disable", "up" ]
+    volumes:
+      - ./migrations:/migrations
+    restart: on-failure
+    depends_on:
+      - db
       
