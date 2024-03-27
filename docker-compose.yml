@@ -5,7 +5,7 @@ services:
     image: postgres
     restart: always
     ports:
-      - 5435:5432
+      - 5435:5431
     environment:
       POSTGRES_PASSWORD: admin
   api:
@@ -15,7 +15,7 @@ services:
     restart: on-failure:10
     environment:
       - PORT=8080
-      - DATABASE_URL=db
+      - DATABASE_URL=postgres:admin@localhost:5431/postgres?sslmode=disable
     depends_on:
       - db
       

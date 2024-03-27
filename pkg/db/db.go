@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -9,17 +10,38 @@ import (
 	"github.com/uptrace/bun/driver/pgdriver"
 )
 
-func StartDB() *bun.DB {
+func StartDB() (*bun.DB, error) {
 	fmt.Println("HI!!!")
 
-	dsn := "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable"
+	dsn := "postgres:admin@localhost:5431/postgres?sslmode=disable"
 	// dsn := "unix://user:pass@dbname/var/run/postgresql/.s.PGSQL.5432"
+	// pgconn := pgdriver.NewConnector(
+	// 	// pgdriver.WithNetwork("tcp"),
+	// 	pgdriver.WithAddr("db:5432"),
+	// 	// pgdriver.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	// 	pgdriver.WithUser("postgres"),
+	// 	pgdriver.WithPassword("admin"),
+	// 	pgdriver.WithDatabase("postgres"),
+	// 	// pgdriver.WithApplicationName("myapp"),
+	// 	// pgdriver.WithTimeout(5 * time.Second),
+	// 	// pgdriver.WithDialTimeout(5 * time.Second),
+	// 	// pgdriver.WithReadTimeout(5 * time.Second),
+	// 	// pgdriver.WithWriteTimeout(5 * time.Second),
+	// 	// pgdriver.WithConnParams(map[string]interface{}{
+	// 	// 	"search_path": "my_search_path",
+	// 	// }),
+	// )
+	// sqldb := sql.OpenDB(pgconn)
 	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
-
 	db := bun.NewDB(sqldb, pgdialect.New())
-	if db != nil {
-		fmt.Print("Connect Success.")
+
+	// Check if the connection is successful
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
+		return db, err
 	}
+	fmt.Print("Success to connect to DB.")
+	return db, nil
 	// 		// Check if the connection is successful
 	// 		ctx := context.Background()
 	// 		if err := db.Ping(ctx); err != nil {
@@ -61,7 +83,7 @@ func StartDB() *bun.DB {
 	// }
 
 	//return the db connection
-	return db
+
 }
 
 // func runMigrations(db *sqlx.DB) error {

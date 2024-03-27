@@ -40,16 +40,17 @@ type Conditions struct {
 
 // CreateAdvertisement creates a new advertisement in the database
 func CreateAdvertisement(ctx context.Context, db *bun.DB, req *AdvertisementReq) error {
-	ad := &Advertisement{
-		Title:   req.Title,
-		StartAt: req.StartAt,
-		EndAt:   req.EndAt,
-	}
-	_, err := db.NewInsert().Model(ad).Exec(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
+	// ad := &Advertisement{
+	// 	Title:   req.Title,
+	// 	StartAt: req.StartAt,
+	// 	EndAt:   req.EndAt,
+	// }
+	// _, err := db.NewInsert().Model(ad).Exec(ctx)
+	// if err != nil {
+	// 	return err
+	// }
+	// return nil
+
 	// sqlStatement := `
 	// 	INSERT INTO advertisement (title, start_at, end_at, conditions)
 	// 	VALUES (?, ?, ?, ?)
@@ -77,7 +78,7 @@ func CreateAdvertisement(ctx context.Context, db *bun.DB, req *AdvertisementReq)
 	// }
 
 	// fmt.Println("Advertisement created successfully")
-	// return nil
+	return nil
 }
 
 // CreateAdvertisementHandler handles creating advertisements

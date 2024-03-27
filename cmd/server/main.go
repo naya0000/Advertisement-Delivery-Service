@@ -206,17 +206,17 @@ import (
 func main() {
 	log.Print("server has started")
 	//start the db
-	bundb := db.StartDB()
-	// if err != nil {
-	// 	log.Printf("error starting the database %v", err)
-	// 	panic("error starting the database")
-	// }
+	bundb, err := db.StartDB()
+	if err != nil {
+		log.Printf("error starting the database %v", err)
+		panic("error starting the database")
+	}
 	//get the router of the API by passing the db
 	router := api.StartAPI(bundb)
 	//get the port from the environment variable
 	port := os.Getenv("PORT")
 	//pass the router and start listening with the server
-	err := http.ListenAndServe(fmt.Sprintf(":%s", port), router)
+	err = http.ListenAndServe(fmt.Sprintf(":%s", port), router)
 	if err != nil {
 		log.Printf("error from router %v\n", err)
 		return
