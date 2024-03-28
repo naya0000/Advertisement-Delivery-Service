@@ -1,4 +1,4 @@
-# Advertisement Service
+# Advertisement Delivery Service
 
 This is a simplified advertisement delivery service designed and implemented in Golang, PostgreSQL and Docker. The service provides two main APIs: one for creating advertisements and another for listing advertisements. Each advertisement can have conditions associated with it, such as age, gender, country, and platform of the user.
 
