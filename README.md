@@ -72,7 +72,7 @@ curl -X GET -H "Content-Type: application/json" \
 - Install Docker if not already installed.
 
 
-## How to Start
+## Getting Started
 1. Clone the repository to your go path.
 2. Set up a database PostgreSQL and configure the connection details in the application.
 3. Run the application.
