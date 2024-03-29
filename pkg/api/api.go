@@ -33,10 +33,15 @@ type Conditions struct {
 
 // CreateAdvertisement creates a new advertisement in the database
 func CreateAdvertisement(db *sql.DB, ad *Advertisement) error {
+	// starts a transaction to insert ad and its conditions
 	tx, err := db.Begin()
 	checkErr(err)
 
-	insertAdStmt, err := tx.Prepare("INSERT INTO advertisement (title, start_at, end_at) VALUES($1, $2, $3) RETURNING id")
+	insertAdStmt, err := tx.Prepare(`
+		INSERT INTO advertisement (title, start_at, end_at) 
+		VALUES($1, $2, $3) 
+		RETURNING id
+	`)
 	checkErr(err)
 	defer insertAdStmt.Close()
 
@@ -45,7 +50,11 @@ func CreateAdvertisement(db *sql.DB, ad *Advertisement) error {
 	checkErr(err)
 	fmt.Println("Last inserted Ad ID =", adInsertId)
 
-	insertConStmt, err := tx.Prepare("INSERT INTO condition (ad_id, age_start, age_end, gender, country, platform) VALUES($1, $2, $3, $4, $5, $6) RETURNING id")
+	insertConStmt, err := tx.Prepare(`
+		INSERT INTO condition (ad_id, age_start, age_end, gender, country, platform) 
+		VALUES($1, COALESCE($2, 1), COALESCE($3, 100), $4, $5, $6) 
+		RETURNING id
+	`)
 	checkErr(err)
 	defer insertConStmt.Close()
 
@@ -54,22 +63,11 @@ func CreateAdvertisement(db *sql.DB, ad *Advertisement) error {
 	checkErr(err)
 	fmt.Println("Last inserted Condition ID =", conInsertId)
 
+	// commits the transaction
 	err = tx.Commit()
 	checkErr(err)
 
 	return err
-	// Convert Conditions to JSON string
-	// conditionsJSON, err := json.Marshal(ad.Conditions)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to marshal conditions: %v", err)
-	// }
-
-	// Execute the SQL statement
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
-
-	// var id int
-	// var result
 }
 
 func checkErr(err error) {
@@ -135,47 +133,58 @@ func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT title, end_at
-		FROM advertisement
-		WHERE start_at < NOW() AND end_at > NOW()
+		SELECT a.title, a.end_at
+		FROM Advertisement a
+		JOIN Condition c ON a.id = c.ad_id
+		WHERE a.start_at < NOW() AND a.end_at > NOW()
 	`
+	// Initialize an empty slice to hold query parameters
+	var queryParams []interface{}
 
-	// Add conditions to the query
+	// Add conditions to the query, handling NULL values appropriately
 	if age != "" {
-		query += fmt.Sprintf(" AND (%s BETWEEN condition.age_start AND condition.age_end)", age)
+		query += " AND (c.age_start IS NULL OR c.age_start <= $1) AND (c.age_end IS NULL OR c.age_end >= $2)"
+		ageStart, _ := strconv.Atoi(age)
+		ageEnd, _ := strconv.Atoi(age)
+		queryParams = append(queryParams, ageStart, ageEnd)
 	}
 	if gender != "" {
-		query += fmt.Sprintf(" AND condition.gender = '%s'", gender)
+		query += " AND (c.gender IS NULL OR c.gender = $3)"
+		queryParams = append(queryParams, gender)
 	}
 	if country != "" {
-		query += fmt.Sprintf(" AND '%s' = ANY (condition.country)", country)
+		query += " AND (c.country IS NULL OR $4 = ANY (c.country))"
+		queryParams = append(queryParams, country)
 	}
 	if platform != "" {
-		query += fmt.Sprintf(" AND '%s' = ANY (condition.platform)", platform)
+		query += " AND (c.platform IS NULL OR $5 = ANY (c.platform))"
+		queryParams = append(queryParams, platform)
 	}
 
 	// Add pagination to the query
-	query += fmt.Sprintf(" ORDER BY end_at ASC OFFSET %d LIMIT %d", offset, limit)
+	query += fmt.Sprintf(" ORDER BY a.end_at ASC OFFSET $%d LIMIT $%d", len(queryParams)+1, len(queryParams)+2)
+	queryParams = append(queryParams, offset, limit)
 
-	rows, err := db.Query(query)
+	// Execute the query with prepared statement and query parameters
+	rows, err := db.Query(query, queryParams...)
+
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
 	// Create struct to hold advertisement data
-	type AdvertisementResponse struct {
+	type AdResponse struct {
 		Title string    `json:"title"`
 		EndAt time.Time `json:"endAt"`
 	}
 
 	// Create slice to hold advertisement data
-	var advertisements []AdvertisementResponse
+	var advertisements []AdResponse
 
 	// Iterate over query results and append to advertisements slice
 	for rows.Next() {
-		var ad AdvertisementResponse
+		var ad AdResponse
 		err := rows.Scan(&ad.Title, &ad.EndAt)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -192,7 +201,7 @@ func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create response struct
 	response := struct {
-		Items []AdvertisementResponse `json:"items"`
+		Items []AdResponse `json:"items"`
 	}{
 		Items: advertisements,
 	}
