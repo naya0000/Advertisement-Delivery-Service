@@ -4,15 +4,37 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/go-redis/redis/v8" // Import Redis package
 	"github.com/lib/pq"
 	// "github.com/go-pg/pg"
 )
+
+// Define a Redis client
+var redisClient *redis.Client
+
+// InitializeRedis initializes the Redis client
+func InitializeRedis() {
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     "redis:6379", // Change this to your Redis server address
+		Password: "",           // No password
+		DB:       0,            // Use default DB
+	})
+	// Ping the Redis server to check connection
+	ctx := redisClient.Context()
+	pong, err := redisClient.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	fmt.Println("Connected to Redis:", pong)
+}
 
 type Advertisement struct {
 	Title      string     `json:"title"`
@@ -31,8 +53,8 @@ type Conditions struct {
 	Platform []string `json:"platform,omitempty"`
 }
 
-// CreateAdvertisement creates a new advertisement in the database
-func CreateAdvertisement(db *sql.DB, ad *Advertisement) error {
+// CreateAd creates a new advertisement in the database
+func CreateAd(db *sql.DB, ad *Advertisement) error {
 	// starts a transaction to insert ad and its conditions
 	tx, err := db.Begin()
 	checkErr(err)
@@ -53,7 +75,7 @@ func CreateAdvertisement(db *sql.DB, ad *Advertisement) error {
 	insertConStmt, err := tx.Prepare(`
 		INSERT INTO condition (ad_id, age_start, age_end, gender, country, platform) 
 		VALUES($1, COALESCE($2, 1), COALESCE($3, 100), $4, $5, $6) 
-		RETURNING id
+		RETURNING ad_id
 	`)
 	checkErr(err)
 	defer insertConStmt.Close()
@@ -76,8 +98,8 @@ func checkErr(err error) {
 	}
 }
 
-// CreateAdvertisementHandler handles creating advertisements
-func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
+// CreateAdHandler handles creating advertisements
+func CreateAdHandler(w http.ResponseWriter, r *http.Request) {
 	var ad Advertisement
 	err := json.NewDecoder(r.Body).Decode(&ad)
 	if err != nil {
@@ -92,7 +114,7 @@ func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Call the CreateAdvertisement function to insert the advertisement into the database
-	err = CreateAdvertisement(db, &ad)
+	err = CreateAd(db, &ad)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -101,7 +123,8 @@ func CreateAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, "Advertisement created successfully")
 }
-func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
+func GetAdHandler(w http.ResponseWriter, r *http.Request) {
+
 	// Parse query parameters
 	params := r.URL.Query()
 	offsetStr := params.Get("offset")
@@ -124,6 +147,23 @@ func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 	gender := params.Get("gender")
 	country := params.Get("country")
 	platform := params.Get("platform")
+
+	// Define a key for Redis cache
+	cacheKey := fmt.Sprintf("ad:%s:%s:%s:%s:%s:%s", age, gender, country, platform, offset, limit)
+
+	// Check if data is available in Redis cache
+	cachedData, err := redisClient.Get(r.Context(), cacheKey).Result()
+	if err == nil {
+		// Data found in cache, return cached data
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(cachedData))
+		return
+	} else if err != redis.Nil {
+		// Error occurred while retrieving data from Redis
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 
 	// Query database for advertisements based on conditions
 	db, ok := r.Context().Value("DB").(*sql.DB)
@@ -213,6 +253,13 @@ func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cache the response in Redis for future requests
+	err = redisClient.Set(r.Context(), cacheKey, jsonResponse, 10*time.Minute).Err() // Cache for 10 minutes
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// Set response content type and write JSON response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -222,20 +269,42 @@ func GetAdvertisementHandler(w http.ResponseWriter, r *http.Request) {
 // start api with the pgdb and return a chi router
 func StartAPI(db *sql.DB) *chi.Mux {
 
+	InitializeRedis()
+
 	//get the router
 	r := chi.NewRouter()
 
 	// add middleware to store our DB to use it later
 	r.Use(middleware.Logger, middleware.WithValue("DB", db))
 
-	r.Route("/api/v1/ad", func(r chi.Router) {
-		r.Post("/", CreateAdvertisementHandler)
-		r.Get("/", GetAdvertisementHandler)
-	})
+	// Create a channel to communicate with goroutines
+	ch := make(chan http.HandlerFunc)
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("up and running"))
-	})
+	// Create a WaitGroup to wait for all goroutines to finish
+	var wg sync.WaitGroup
+	// Define the number of concurrent requests
+	numRequests := 16
+
+	// Launch goroutines to handle concurrent requests
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ch <- GetAdHandler
+		}()
+	}
+
+	go func() {
+		wg.Wait() // Wait for all goroutines to finish
+		close(ch) // Close the channel to signal that all responses have been received
+	}()
+
+	// Collect responses from the channel
+	for handler := range ch {
+		r.Get("/api/v1/ad", handler)
+	}
+
+	r.Post("/api/v1/ad", CreateAdHandler)
 
 	return r
 }

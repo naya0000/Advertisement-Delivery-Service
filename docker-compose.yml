@@ -1,11 +1,16 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis
+    restart: always
+    ports:
+      - 6379:6379
   db:
     image: postgres
     restart: always
     ports:
-      - 5435:5432
+      - 5434:5432
     environment:
       POSTGRES_PASSWORD: admin
   api:
@@ -18,6 +23,7 @@ services:
       - DATABASE_URL=db
     depends_on:
       - db
+      - redis
   migrate:
     image: migrate/migrate
     command: [ "-path", "/migrations", "-database",  "postgresql://postgres:admin@db:5432/postgres?sslmode=disable", "up" ]
