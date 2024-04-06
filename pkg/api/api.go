@@ -175,7 +175,7 @@ func GetAdHandler(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT a.title, a.end_at
 		FROM Advertisement a
-		JOIN Condition c ON a.id = c.ad_id
+		INNER JOIN Condition c ON a.id = c.ad_id
 		WHERE a.start_at < NOW() AND a.end_at > NOW()
 	`
 	// Initialize an empty slice to hold query parameters
