@@ -43,7 +43,7 @@
 
 ### Request範例
 
-## 建立廣告 API
+1.  建立廣告 API
 
 **請求方式**
 
@@ -60,7 +60,7 @@ POST /api/v1/ad
 | endAt       | 時間   | 廣告結束時間         |
 | conditions  | JSON   | 廣告條件             |
 
-**示例請求**
+**Request**
 
 ```json
 {
@@ -77,26 +77,26 @@ POST /api/v1/ad
 }
 ```
 
-**響應**
+**Response**
 
 - **成功**:
   - 狀態碼: 201 Created
   - 內容: `{"message": "Advertisement created successfully"}`
 - **失敗**:
-  - 狀態碼: 適當的錯誤狀態碼
+  - 狀態碼: 錯誤狀態碼
   - 內容: `{"error": "錯誤消息"}`
 
 ---
 
-## 獲取廣告 API
+2. 獲取廣告 API
 
 **請求方式**
 
 ```
-GET /api/v1/ad
+GET http://localhost:8080/api/v1/ad
 ```
 
-**可選請求參數**
+**請求參數(Optional)**
 
 | 參數        | 類型   | 描述                  |
 |-------------|--------|-----------------------|
@@ -107,13 +107,13 @@ GET /api/v1/ad
 | offset      | 數字   | 結果偏移量（可選）    |
 | limit       | 數字   | 返回數據限制（可選）  |
 
-**示例請求**
+**Request**
 
 ```
 GET /api/v1/ad?age=25&gender=M&country=US&platform=ios&offset=0&limit=10
 ```
 
-**響應**
+**Response**
 
 - **成功**:
   - 狀態碼: 200 OK
