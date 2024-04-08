@@ -25,8 +25,6 @@ func GetAd(db *sql.DB, params models.QueryParams) (*sql.Rows, error) {
 		FROM advertisement
 		WHERE start_at < NOW() AND end_at > NOW()
 	`
-
-	// Initialize an empty slice to hold query parameters
 	var queryParams []interface{}
 
 	if params.Age != "" {
@@ -52,7 +50,6 @@ func GetAd(db *sql.DB, params models.QueryParams) (*sql.Rows, error) {
 		queryParams = append(queryParams, jsonPlatform)
 	}
 
-	// Add pagination to the query
 	query += " ORDER BY end_at ASC OFFSET $5 LIMIT $6"
 	queryParams = append(queryParams, params.Offset, params.Limit)
 
@@ -69,7 +66,6 @@ func CreateAd(db *sql.DB, ad *models.Advertisement) error {
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %v", err)
 	}
-	defer tx.Rollback()
 
 	insertAdStmt, err := tx.Prepare(`
 		INSERT INTO advertisement (title, start_at, end_at, conditions) 
@@ -77,6 +73,7 @@ func CreateAd(db *sql.DB, ad *models.Advertisement) error {
 		RETURNING id
 	`)
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to prepare insert statement: %v", err)
 	}
 	defer insertAdStmt.Close()
@@ -87,20 +84,22 @@ func CreateAd(db *sql.DB, ad *models.Advertisement) error {
 		ad.Conditions.AgeStart = &defaultAgeStart
 	}
 
+	// set default value to 100
 	if ad.Conditions.AgeEnd == nil {
 		defaultAgeEnd := uint8(100)
 		ad.Conditions.AgeEnd = &defaultAgeEnd
 	}
 
-	// Marshal conditions to JSONB
 	conditionsJSON, err := json.Marshal(ad.Conditions)
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to marshal conditions to JSON: %v", err)
 	}
 
 	// Insert conditions
 	_, err = insertAdStmt.Exec(ad.Title, ad.StartAt, ad.EndAt, []byte(conditionsJSON))
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to execute insert statement: %v", err)
 	}
 

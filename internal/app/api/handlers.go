@@ -18,6 +18,7 @@ import (
 
 // Handles creating advertisements
 func CreateAdHandler(c *gin.Context) {
+
 	var ad models.Advertisement
 	if err := c.BindJSON(&ad); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -33,6 +34,7 @@ func CreateAdHandler(c *gin.Context) {
 	//get the db from context
 	db, exists := c.Get("DB")
 	if !exists {
+		log.Print("error: DB not found in context")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB not found in context"})
 		return
 	}
@@ -40,15 +42,14 @@ func CreateAdHandler(c *gin.Context) {
 	// Insert the advertisement into the database
 	err := database.CreateAd(db.(*sql.DB), &ad)
 	if err != nil {
+		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
-	// Write a success response
 	c.JSON(http.StatusCreated, gin.H{"message": "Advertisement created successfully"})
 }
 
-// Handles retrieving advertisements
 func GetAdHandler(c *gin.Context) {
 	offsetStr := c.DefaultQuery("offset", "0")
 	limitStr := c.DefaultQuery("limit", "5")
@@ -73,7 +74,6 @@ func GetAdHandler(c *gin.Context) {
 		Limit:    limit,
 	}
 
-	// Validate age parameter
 	if queryParams.Age != "" {
 		_, err := strconv.Atoi(queryParams.Age)
 		if err != nil {
@@ -93,8 +93,6 @@ func GetAdHandler(c *gin.Context) {
 	}
 
 	if cachedData != "" {
-		// Data found in cache
-		log.Print("Return cached data")
 		c.Data(http.StatusOK, "application/json", []byte(cachedData))
 		return
 	}
@@ -112,13 +110,11 @@ func GetAdHandler(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	// Create struct to hold advertisement data
 	type AdResponse struct {
 		Title string    `json:"title"`
 		EndAt time.Time `json:"endAt"`
 	}
 
-	// Create slice to hold advertisement data
 	var advertisements []AdResponse
 
 	// Iterate over query results and append to advertisements slice
@@ -132,20 +128,17 @@ func GetAdHandler(c *gin.Context) {
 		advertisements = append(advertisements, ad)
 	}
 
-	// Check for errors during rows iteration
 	if err := rows.Err(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to iterate through advertisement data"})
 		return
 	}
 
-	// Create response struct
 	response := struct {
 		Items []AdResponse `json:"items"`
 	}{
 		Items: advertisements,
 	}
 
-	// Marshal response struct to JSON
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal response"})
@@ -153,12 +146,11 @@ func GetAdHandler(c *gin.Context) {
 	}
 
 	// Cache the response in Redis for future requests
-	err = redisDB.SetCacheData(c, cacheKey, jsonResponse, 10*time.Second) // Cache for 10 minutes
+	err = redisDB.SetCacheData(c, cacheKey, jsonResponse, time.Minute) // Cache for 1 minute
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cache response"})
 		return
 	}
 
-	// Set response content type and write JSON response
 	c.Data(http.StatusOK, "application/json", jsonResponse)
 }

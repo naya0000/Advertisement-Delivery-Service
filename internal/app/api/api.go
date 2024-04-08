@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/naya0000/Advertisement_Manage.git/internal/pkg/database"
+	"github.com/naya0000/Advertisement_Manage.git/internal/pkg/redisDB"
 )
 
 // StartAPI initializes and returns the Gin router
@@ -13,7 +14,11 @@ func StartAPI() (*gin.Engine, error) {
 		return nil, err
 	}
 
-	// Initialize Gin router
+	err = redisDB.InitClient()
+	if err != nil {
+		return nil, err
+	}
+
 	r := gin.Default()
 
 	// Middleware to store DB in context
