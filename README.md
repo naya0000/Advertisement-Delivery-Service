@@ -1,78 +1,38 @@
-# Advertisement Delivery Service
+## 廣告投放服務
 
-This is a simplified advertisement delivery service designed and implemented in Golang, PostgreSQL and Docker. The service provides two main APIs: one for creating advertisements and another for listing advertisements. Each advertisement can have conditions associated with it, such as age, gender, country, and platform of the user.
+### 介紹
 
-## Features
+廣告投放服務提供了創建廣告、檢索廣告等功能。該系統使用了 Go 語言編寫後端服務，並使用 Gin 框架處理 HTTP 請求，同時利用 PostgreSQL 存儲廣告信息，並使用 Redis 緩存來提高查詢性能。另外，也將所有服務打包成一個docker-compose檔。
 
-- **Admin API**: Used for managing advertisement resources. It supports creating advertisements with specified conditions. The API includes:
-  - Title: Title of the advertisement.
-  - StartAt and EndAt: Time period for displaying the advertisement.
-  - Conditions: Optional criteria such as age, gender, country, and platform.
+### 技術
 
-- **Public API**: Used for fetching advertisements based on user-specified criteria. The API provides:
-  - Listing active advertisements within the specified conditions.
-  - Pagination support using offset and limit parameters.
-  - Query parameters for filtering advertisements based on age, gender, country, and platform.
+- **後端開發語言**: Go
+- **Web 框架**: Gin
+- **數據庫**: PostgreSQL
+- **緩存**: Redis
 
-## APIs
+### 結構
 
-### Admin API
+專案分為三個主要模塊：`api`、`database`、`redisDB`。
 
-- Endpoint: `/api/v1/ad`
-- Method: `POST`
-- Usage:
-```bash
-curl -X POST -H "Content-Type: application/json" \
-"http://<host>/api/v1/ad" \
---data '{
-  "title": "AD 55",
-  "startAt": "2023-12-10T03:00:00.000Z",
-  "endAt": "2023-12-31T16:00:00.000Z",
-  "conditions": [
-    {
-      "ageStart": 20,
-      "ageEnd": 30,
-      "country": ["TW", "JP"],
-      "platform": ["android", "ios"]
-    }
-  ]
-}'
-```
+- **api**: 包含處理 HTTP 請求的路由和處理函數。提供了創建廣告和檢索廣告的接口。
+- **database**: 提供了與 PostgreSQL 數據庫交互的功能。包含了創建廣告、檢索廣告。
+- **redisDB**: 提供了與 Redis 緩存交互的功能。初始化 Redis 客戶端並提供了設置和獲取緩存數據的函數。
 
-### Public API
-- Endpoint: `/api/v1/ad`
-- Method: `GET`
-- Usage:
-```bash
-curl -X GET -H "Content-Type: application/json" \
-"http://<host>/api/v1/ad?offset=10&limit=3&age=24&gender=F&country=TW&platform=ios"
+### 設計選擇
 
-```
-- Response:
-```json
-{
-  "items": [
-    {
-    "title": "AD 1",
-    "endAt": "2023-12-22T01:00:00.000Z"
-    },
-    {
-    "title": "AD 31",
-    "endAt": "2023-12-30T12:00:00.000Z"
-    },
-    {
-    "title": "AD 10",
-    "endAt": "2023-12-31T16:00:00.000Z"
-    }
-  ]
-}
-```
-## Prerequirements
-- Install Golang if not already installed.
-- Install Docker if not already installed.
+1. **Gin 框架**: 選擇 Gin 框架作為 Web 框架，因為它具有輕量級、快速和簡單易用的特點，適合快速開發 RESTful API。
+   
+2. **PostgreSQL 資料庫**: 使用 PostgreSQL 存儲廣告信息。選擇 PostgreSQL 的原因包括其穩定性、可靠性和功能強大的 JSONB 數據類型，能夠存儲靈活的廣告條件數據。
+   
+3. **Redis 緩存**: 利用 Redis 緩存來提高廣告檢索接口的性能。通過緩存最近的查詢結果，減少對數據庫的頻繁查詢。
 
+4. **分表分區**: 針對廣告資料表，根據 `end_at` 字段進行分區，以提高查詢效率。
+5. **索引**：創建`end_at`的索引，提高檢索廣告的排序效率。
+6. **上下文傳遞**: 使用 Gin 框架的上下文功能，將數據庫連接和其他相關對象傳遞給處理函數，使得處理函數可以方便地訪問數據庫和其他資源。
 
-## Getting Started
+### Getting Started
+
 1. Clone the repository to your go path.
 2. Set up a database PostgreSQL and configure the connection details in the application.
 3. Run the application.
@@ -80,3 +40,99 @@ curl -X GET -H "Content-Type: application/json" \
    docker-compose up --build
    ```
 4. Access the APIs using the provided endpoints and methods.
+
+### Request範例
+
+## 建立廣告 API
+
+**請求方式**
+
+```
+POST /api/v1/ad
+```
+
+**請求參數**
+
+| 參數        | 類型   | 描述                 |
+|-------------|--------|----------------------|
+| title       | 字符串 | 廣告標題             |
+| startAt     | 時間   | 廣告開始時間         |
+| endAt       | 時間   | 廣告結束時間         |
+| conditions  | JSON   | 廣告條件             |
+
+**示例請求**
+
+```json
+{
+    "title": "Summer Sale",
+    "startAt": "2024-06-01T00:00:00Z",
+    "endAt": "2024-06-30T23:59:59Z",
+    "conditions": {
+        "ageStart": 18,
+        "ageEnd": 50,
+        "gender": "M",
+        "country": ["US", "CA"],
+        "platform": ["ios", "android"]
+    }
+}
+```
+
+**響應**
+
+- **成功**:
+  - 狀態碼: 201 Created
+  - 內容: `{"message": "Advertisement created successfully"}`
+- **失敗**:
+  - 狀態碼: 適當的錯誤狀態碼
+  - 內容: `{"error": "錯誤消息"}`
+
+---
+
+## 獲取廣告 API
+
+**請求方式**
+
+```
+GET /api/v1/ad
+```
+
+**可選請求參數**
+
+| 參數        | 類型   | 描述                  |
+|-------------|--------|-----------------------|
+| age         | 字符串 | 年齡條件（可選）      |
+| gender      | 字符串 | 性別條件（可選）      |
+| country     | 字符串 | 國家條件（可選）      |
+| platform    | 字符串 | 平台條件（可選）      |
+| offset      | 數字   | 結果偏移量（可選）    |
+| limit       | 數字   | 返回數據限制（可選）  |
+
+**示例請求**
+
+```
+GET /api/v1/ad?age=25&gender=M&country=US&platform=ios&offset=0&limit=10
+```
+
+**響應**
+
+- **成功**:
+  - 狀態碼: 200 OK
+  - 內容: 返回廣告列表的 JSON 數據
+- **失敗**:
+  - 狀態碼: 適當的錯誤狀態碼
+  - 內容: `{"error": "錯誤消息"}`
+
+**注意事項**
+
+- 如果沒有提供任何參數，則將返回所有廣告。
+- 參數 `offset` 和 `limit` 用於分頁，`offset` 指定返回結果的起始位置，`limit` 指定返回的數據量。
+- 其他參數用於篩選廣告，可以根據年齡、性別、國家和平台進行篩選。
+
+
+
+### 參考資料
+
+- [Gin 文檔](https://github.com/gin-gonic/gin)
+- [PostgreSQL 文檔](https://www.postgresql.org/docs/)
+- [Redis 文檔](https://redis.io/documentation)
+
