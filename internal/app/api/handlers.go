@@ -103,54 +103,65 @@ func GetAdHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "DB not found in context"})
 		return
 	}
-	rows, err := database.GetAd(db.(*sql.DB), queryParams)
-	if err != nil {
+
+	// Use goroutine to handle the database query
+	advertisementsChan := make(chan []AdResponse)
+	errChan := make(chan error)
+
+	go func() {
+		rows, err := database.GetAd(db.(*sql.DB), queryParams)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer rows.Close()
+
+		var advertisements []AdResponse
+
+		// Iterate over query results and append to advertisements slice
+		for rows.Next() {
+			var ad AdResponse
+			err := rows.Scan(&ad.Title, &ad.EndAt)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			advertisements = append(advertisements, ad)
+		}
+
+		if err := rows.Err(); err != nil {
+			errChan <- err
+			return
+		}
+
+		advertisementsChan <- advertisements
+	}()
+
+	select {
+	case advertisements := <-advertisementsChan:
+		response := struct {
+			Items []AdResponse `json:"items"`
+		}{
+			Items: advertisements,
+		}
+
+		jsonResponse, err := json.Marshal(response)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal response"})
+			return
+		}
+
+		// Cache the response in Redis for future requests
+		err = redisDB.SetCacheData(c, cacheKey, jsonResponse, time.Minute) // Cache for 1 minute
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cache response"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", jsonResponse)
+
+	case err := <-errChan:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
-	defer rows.Close()
-
-	type AdResponse struct {
-		Title string    `json:"title"`
-		EndAt time.Time `json:"endAt"`
-	}
-
-	var advertisements []AdResponse
-
-	// Iterate over query results and append to advertisements slice
-	for rows.Next() {
-		var ad AdResponse
-		err := rows.Scan(&ad.Title, &ad.EndAt)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan advertisement data"})
-			return
-		}
-		advertisements = append(advertisements, ad)
-	}
-
-	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to iterate through advertisement data"})
-		return
-	}
-
-	response := struct {
-		Items []AdResponse `json:"items"`
-	}{
-		Items: advertisements,
-	}
-
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal response"})
-		return
-	}
-
-	// Cache the response in Redis for future requests
-	err = redisDB.SetCacheData(c, cacheKey, jsonResponse, time.Minute) // Cache for 1 minute
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cache response"})
-		return
-	}
-
-	c.Data(http.StatusOK, "application/json", jsonResponse)
 }
